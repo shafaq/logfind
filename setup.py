@@ -15,3 +15,4 @@ config = {
     'scripts': [],
     'name': 'logfind'
 }
+setup(**config)
