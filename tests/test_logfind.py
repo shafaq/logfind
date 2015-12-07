@@ -79,29 +79,32 @@ class TestMatchRegex(unittest.TestCase):
         pass
     
     def test_match_regex_true(self):
-        self.assertTrue(logfind.matches_regex('abc.txt', self.regexes))  
+        self.assertEqual(logfind.match_regex('abc.txt', self.regexes),[False, True])  
     
     def test_match_regex_false(self):
-        self.assertFalse(logfind.matches_regex('txt.py', self.regexes))    
+        self.assertEqual(logfind.match_regex('txt.py', self.regexes), [False, False])    
 
 
 class TestMatchTerms(unittest.TestCase):
     def setUp(self):
-        #self.file1 = open('/home/shafaq/test.txt','r+t')
-        #self.file1.write('file write\n')
-        #self.file1.write('file a string \n')
-        #self.file1.write('file a food \n')
-        #self.file1.write('file like \n')
-        #self.file1.seek(0)
-        pass
+        self.file1 = tempfile.NamedTemporaryFile('r+b')
+        self.file1.write(b'file write\n')
+        self.file1.write(b'file a string \n')
+        self.file1.write(b'file a food \n')
+        self.file1.write(b'file like \n')
+        self.file1.seek(0)
+        
 
     def tearDown(self):
         pass
     def test_match_terms_and_true(self):
-        self.assertTrue(logfind.match_terms('/home/shafaq/test.txt', [r'\b.*ood\b', r'like'] ,all))
+        self.assertTrue(logfind.match_terms(self.file1.name, [r'\b.*ood\b', r'like'], all))
     def test_match_terms_and_false(self):
-        self.assertFalse(logfind.match_terms('/home/shafaq/test.txt', [r'\b.*ood\b', r'like', r'rude'] ,all))        
-
+        self.assertFalse(logfind.match_terms(self.file1.name, [r'\b.*ood\b', r'like', r'rude'], all))        
+    def test_match_terms_any_true(self):
+        self.assertTrue(logfind.match_terms(self.file1.name, [r'\b.*ood\b', r'like', r'rude'], any))        
+    
+        
 if __name__ == '__main__' :
 
     unittest.main()
