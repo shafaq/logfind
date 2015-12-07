@@ -5,7 +5,7 @@ import re
 import argparse
 
 
-DEBUG = True
+DEBUG = False
 
 def usage():
     pass
@@ -31,21 +31,45 @@ def read_lines(filename):
 
 
 
+def match_regex(to_match, regexes):
+    
+    ''' returns which regexes have been matched '''
+    logic_array = [False for regexp in regexes]
+    for index, rex in enumerate(regexes):
+        #print(to_match)
+        if rex.search(to_match):
+            logic_array[index] = True
+    #print(logic_array)
+    return logic_array
+
+
+    
+def is_valid_regex(regexp):
+
+    try:
+        re.compile(regexp)
+        return True
+    except re.error:
+        print('***Warning, not a valid regex %s' %regexp)
+        return False
+
+
 def match_terms(filename, search_terms, logic):
     ''' Returns true if a file has all or any (according to logic) of the search terms'''
-
-    logic_array = [False for x in search_terms]
+    
+    search_regexes = [re.compile(p) for p in search_terms if is_valid_regex(p)]
+    all_found = [False for x in search_regexes]
+    
     for line in read_lines(filename):
-        for index,term in enumerate(search_terms):
-            if re.search(term ,line): # refactor to use match_regex
-                logic_array[index] =  True
-                if logic(logic_array):
-                    return True                   
+        #print(line)
+        current_line_found = match_regex(line, search_regexes)
+        #print(temp)
+        all_found =  [x or y for x, y in list(zip(all_found, current_line_found))]
+        if logic(all_found):
+            return True                   
     else:
         return False
         
-    
-
         
 def load_file_regexes(regex_file):
     ''' Reads the types of files to be searched from ~/.logfind. The file specifies the criteria using regular expressions. 
@@ -77,15 +101,6 @@ def load_file_regexes(regex_file):
 
     return regexes 
 
-def is_valid_regex(regexp):
-
-    try:
-        re.compile(regexp)
-        return True
-    except re.error:
-        print('***Warning, not a valid regex %s' %regexp)
-        return False
-            
 
 def exit_application(message):
     print(message)
@@ -93,14 +108,6 @@ def exit_application(message):
     sys.exit()              
     
       
-def matches_regex(file_name, regexes):
-    '''use any built in '''
-    ''' returns true if file_name matches any of the regex provided'''
-    for r in regexes:
-        if r.match(file_name):
-            return True
-    return False        
- 
 
 def process_args(argv):
     
@@ -120,7 +127,7 @@ def process_args(argv):
 
 def main(argv):
     
-    search_logic, search_terms = process_args(argv)     
+    search_logic, search_words = process_args(argv)     
     
     HOME = os.path.expanduser("~")
     REGEX_FILE_PATH = os.path.join(HOME, '.logfind')
@@ -129,9 +136,10 @@ def main(argv):
     output_files = []
     
     for root, dirs, files in os.walk(HOME):
-        scan_list = [os.path.join(root,f) for f in files if matches_regex(f, regexes)]
+        scan_list = [os.path.join(root,f) for f in files if any(match_regex(f, regexes))] #if f matches any of regexes
+        
         for f in scan_list:
-            if match_terms(f, search_terms, search_logic):
+            if match_terms(f, search_words, search_logic):
                 output_files.append(f) 
 
     
