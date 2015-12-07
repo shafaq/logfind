@@ -142,11 +142,12 @@ def main(argv):
             if match_terms(f, search_words, search_logic):
                 output_files.append(f) 
 
-    
-    for i in output_files: 
-        print(i)
+    return output_files
     
     
 if __name__ == "__main__":
    
-   main(sys.argv[1:])
+   result = main(sys.argv[1:])
+   for f in result: 
+        print(f)
+    
