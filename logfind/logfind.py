@@ -1,165 +1,144 @@
+
 import sys
 import os 
-import os.path
-import glob
 import re
-import getopt
-import os.path
-
-DEBUG = False
+import argparse
 
 
+DEBUG = True
 
 def usage():
-    ''' usage of this module'''
     pass
 
 def debug_log(log_list):
-    ''' logs debugging information to console or file'''
-    if DEBUG:
-        print("\n ---debug infomation---")
-        for item in log_list:
-            print("To be printed :", item[0])
-            print(item[1])
-        print("---debug infomation---\n")
+    if not DEBUG:
+        return
+
+    print("\n ---debug infomation---")
+
+    for message, obj in log_list:
+        print("To be printed :", message)
+        print(obj)
+
+    print("---debug infomation---\n")
 
 
-
-
-def and_searching(file_in, search_terms):
+def read_lines(filename):
     
-    #print('In and_searching(), file :', file_in)
-    debug_log([('search terms', search_terms),])
-    fd = open(file_in)
-    text = fd.read()
-    #print(text)
-    for w in search_terms:  
-        #print('looking for search term', w)
-        if re.search(w,text) is None:
-                fd.close()
-                return None
-    else: 
-        #print('All words found in ', file_in)
-        fd.close()   
-        return file_in
+    with open(filename) as f:
+        for line in f:
+            yield line
 
-def or_searching(file_in, search_terms):
-    #print('In or_searching()')
-    fd = open(file_in)
-    text = fd.read()
 
-    for w in search_terms:  
-        if re.search(w, text) is not None:
-            fd.close()
-            return file_in
-    else: 
-        fd.close()   
-        return None
+
+def match_terms(filename, search_terms, logic):
+    ''' Returns true if a file has all or any (according to logic) of the search terms'''
+
+    logic_array = [False for x in search_terms]
+    for line in read_lines(filename):
+        for index,term in enumerate(search_terms):
+            if re.search(term ,line): # refactor to use match_regex
+                logic_array[index] =  True
+                if logic(logic_array):
+                    return True                   
+    else:
+        return False
+        
+    
 
         
-def load_file_regexes():
-    ''' Reads the types of files to be searched from ~/.logfind.txt. The file specifies the criteria using regular expressions. 
-    If the file is empty then by default searches for .log files '''
+def load_file_regexes(regex_file):
+    ''' Reads the types of files to be searched from ~/.logfind. The file specifies the criteria using regular expressions. 
+    If the file does not exists or is empty then by default searches for .log files '''
+    
     type_regs = []
+    
     default_reg = r'.*\.log$'
 
-    file_name = os.path.join(os.path.expanduser("~") , '.logfind')
+    try:
 
-    with open(file_name) as fo:
-        for line in fo:
-            
+        for line in read_lines(regex_file):
             line = line.strip(' \t\n\r')
             if line != '':
-                type_regs.append(line)
-
-    if len(type_regs) == 0:
-        type_regs.append(default_reg)
-
-    #debug_log([("regular expressions", type_regs)])
-    
-    regexes = [re.compile(p) for p in type_regs]
-
-    #print (regexes) 
-    return regexes 
+                type_regs.append(line) 
         
+    except OSError:
+        msg = '***Error: .logfind file does not exist.'  
+        exit_application(msg)              
+    
+    if len(type_regs) == 0:
+        type_regs.append(default_reg) 
+    
+    debug_log([("regular expressions", type_regs)])
+    regexes = [re.compile(p) for p in type_regs if is_valid_regex(p)]
+    
+    if len(regexes) == 0:
+        exit_application('No valid regex found in file.')
+
+    return regexes 
+
+def is_valid_regex(regexp):
+
+    try:
+        re.compile(regexp)
+        return True
+    except re.error:
+        print('***Warning, not a valid regex %s' %regexp)
+        return False
+            
+
+def exit_application(message):
+    print(message)
+    usage()
+    sys.exit()              
+    
+      
+def matches_regex(file_name, regexes):
+    '''use any built in '''
+    ''' returns true if file_name matches any of the regex provided'''
+    for r in regexes:
+        if r.match(file_name):
+            return True
+    return False        
+ 
+
+def process_args(argv):
+    
+    
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument('-o', dest="logic", action="store_const", const=any, default= all, 
+                        help="option of or-ing the search terms instead of default anding")
+    parser.add_argument('terms', nargs='+', metavar='TERM',  
+                           help='search terms to search the files text for')
+     
+    args = parser.parse_args(argv)
+        
+    return(args.logic, args.terms)
+
+
 
 def main(argv):
-    ''' Driver of this module when running as primary module'''
+    
+    search_logic, search_terms = process_args(argv)     
+    
+    HOME = os.path.expanduser("~")
+    REGEX_FILE_PATH = os.path.join(HOME, '.logfind')
 
-
-    #1 Read command line arguments
-    AND_SEARCH = True
-    OR_SEARCH = False
-    search_terms = []
+    regexes = load_file_regexes(REGEX_FILE_PATH) 
     output_files = []
-    def process_args():
-        nonlocal AND_SEARCH
-        nonlocal OR_SEARCH   
-        nonlocal search_terms
-        #print(argv)
-        try:
-            opts, args = getopt.getopt(argv, 'o', ['or',])
-            #print('opts =', opts)
-            #print('args =', args)
-        except getopt.GetoptError:
-            usage() 
-            sys.exit(2)
-        
-        if len(opts) == 0:
-            #print('length of option is zero')
-            AND_SEARCH = True
-        else:    
-            opt, arg = opts[0]
-            if opt in ('-o', '--or'):
-                AND_SEARCH = False
-                OR_SEARCH = True
-         
-        search_terms =  args    
-        
-        #debug_log([("AND_SEARCH-inside process_args", [AND_SEARCH])])
-        #debug_log([("OR_SEARCH-inside process args", [OR_SEARCH])])
     
+    for root, dirs, files in os.walk(HOME):
+        scan_list = [os.path.join(root,f) for f in files if matches_regex(f, regexes)]
+        for f in scan_list:
+            if match_terms(f, search_terms, search_logic):
+                output_files.append(f) 
+
     
-    process_args()     
-    
-    #debug_log([("AND_SEARCH", [AND_SEARCH])])
-    #debug_log([("OR_SEARCH", [OR_SEARCH])])
-            
-    #2 Load files and populate regexes
-    
-    regexes = load_file_regexes() 
-    debug_log([('regex', regexes),])
-
-    debug_log([('search terms', search_terms),])
-    
-    #3 Search in files
-    
-
-    for root, dirs, files in os.walk('/home/shafaq/python'):
-        scan_list = []
-        for f in files: 
-            for r in regexes:
-                if r.match(f):
-                    scan_list.append(os.path.join(root, f))
-                    break
-        if AND_SEARCH:
-            output_files.extend([and_searching(x, search_terms) for x in  scan_list if and_searching(x, search_terms)])
-
-        else:
-            output_files.extend([or_searching(x, search_terms) for x in  scan_list if or_searching(x, search_terms)])
-
-
-
-    #4 List output files. 
-    debug_log([('output files', output_files),])
-
-    for i in output_files:
+    for i in output_files: 
         print(i)
-    #return output_files
+    
     
 if __name__ == "__main__":
    
    main(sys.argv[1:])
-
-     
-    
